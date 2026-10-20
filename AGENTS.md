@@ -1,420 +1,268 @@
-# AGENTS.md — Wellcome Timeline Developer & Agent Guide
+# AGENTS.md — Wellcome Timeline Developer & Agent Guide (v2.0 React + TypeScript)
 
-> **Target Audience:** Autonomous AI coding agents, maintainers, and developers interacting with, extending, or refactoring the **Wellcome Timeline** application codebase.
+> **Target Audience:** Autonomous AI coding agents, maintainers, and developers interacting with, extending, or deploying the **Wellcome Timeline** codebase.
 
 ---
 
 ## 1. Executive Summary & Application Overview
 
-The **Wellcome Timeline** is a client-side interactive timeline component developed by the Wellcome Library (now Wellcome Collection). It visualizes historical events over centuries, decades, and years, smoothly scaling and expanding as users zoom and pan across time.
+The **Wellcome Timeline** is an interactive client-side historical timeline component originally created by the Wellcome Library (Wellcome Collection) and rewritten from the ground up in **React 18, TypeScript, and Vite**. All legacy runtime dependencies (`jQuery 1.7.2`, `jQuery UI 1.10.1`, `iScroll v4`, `easyXDM`, `jquery.address`, `moment.js`, and `json2.js`) have been eliminated while preserving the original data contracts, astronomical Julian Day math, dual-level navigation UX, and deep-linking behavior.
 
-A live production implementation can be observed in the Wellcome Library Medical Officer of Health (MOH) reports:
-- **Live Example**: [Wellcome Library MOH Timeline](https://wellcomelibrary.org/moh/timeline/)
-- **Live Example Host Embed Markup**:
-  ```html
-  <div class="timelineContainer" style="height: 900px">
-      <div id="timeline" class="timeline" data-uri="/timelines/moh.json" style="width:100%; height:900px"></div>
-      <script type="text/javascript" src="/plugins/timeline/embed.min.js"></script>
-  </div>
-  ```
+The original ES5/jQuery codebase is preserved for historical reference in [`legacy/`](file:///Users/matt.mcgrattan/code/timeline/legacy).
 
-### Primary Characteristics
-- **Embeddable via Iframe & easyXDM**: Designed to be dropped into any host CMS or external site via an embed snippet without CSS or JS collisions.
-- **Calendar-Independent Julian Day Foundation**: Historical dates spanning arbitrary eras (including BCE/ancient dates) are processed using astronomical Julian Day numbers converted into `moment.js` objects.
-- **Density-Adaptive Canvas**: Uses a dynamic collision detection and multi-level vertical event stacking algorithm. As the user zooms in, horizontal space expands and more event cards seamlessly fade in.
-- **Dual-Level Navigation**: Event cards float above tick bars on an [iScroll](https://github.com/cubiq/iscroll) canvas, while aggregated tick-dots represent events on the time axis even when zoomed out.
-- **Deep Linking**: Synchronizes selected events with parent window URL fragments (e.g., `#16121`).
+### Key Capabilities & Enhancements
+- **Zero Legacy Dependencies & Scoped Styling:** Built with React 18, TypeScript, and CSS Modules ([`WellcomeTimeline.module.css`](file:///Users/matt.mcgrattan/code/timeline/src/components/WellcomeTimeline.module.css)) so the component can be mounted directly on any host page without global CSS/JS collisions or `easyXDM` iframes.
+- **Monet's Letters Visual Theme:** Restyled to match the typography (`Cormorant Garamond Variable` and `Work Sans Variable`) and warm archival color palette (`#fefbf4` paper, `#f6f3ec` section wash, `#ebe4db` stone panels, `#d8cfc3` borders, and `#19599a` / `#124574` Monet blues) of [Monet's Letters](https://monet-letters-dev.ch.digirati.io/en/people/141), while keeping the original layout geometry and UX intact.
+- **Astronomical Julian Day Foundation:** Processes historical and ancient BCE/CE dates via a strict TypeScript port of the Press et al. algorithm in [`julianDateConverter.ts`](file:///Users/matt.mcgrattan/code/timeline/src/utils/julianDateConverter.ts) combined with `date-fns`.
+- **Two-Pass Priority Collision Engine & Spillover:** Distributes events across a 3-level vertical stack (`eventStackSize = 3`), resolving horizontal overlaps in strict priority order (eliminating legacy "zombie suppression") and spilling colliding cards in dense decades into open adjacent rows.
+- **Smooth Wheel, Pointer & Kinetic Scrolling:** Uses [`normalize-wheel-es`](https://www.npmjs.com/package/normalize-wheel-es) for cross-browser wheel/trackpad normalization alongside native React Pointer Events and `requestAnimationFrame` inertia decay (`0.92` friction), gating CSS transitions so interactive scrolling runs at immediate 1:1 frame rates.
+- **Dual Build Targets:**
+  1. **Static Site (`docs/`):** Self-contained GitHub Pages build (`base: './'`) defaulting to [`monet_letters.json`](file:///Users/matt.mcgrattan/code/timeline/src/monet_letters.json) (397 Claude Monet correspondence events with DLCS IIIF square thumbnails).
+  2. **Embeddable Library (`dist/`):** Tree-shakeable ESM (`dist/wellcome-timeline.js`) and UMD (`dist/wellcome-timeline.umd.cjs`) bundles with an automatic `.timeline` DOM mounter ([`src/lib.ts`](file:///Users/matt.mcgrattan/code/timeline/src/lib.ts)).
 
 ---
 
 ## 2. Technology Stack & Key Dependencies
 
-| Component | Library / Version | Role & Notes |
+| Layer | Package / Module | Role & Notes |
 | :--- | :--- | :--- |
-| **DOM & UI Foundation** | [jQuery 1.7.2](https://github.com/jquery/jquery) | Loaded via Google CDN or fallback in [embed.js](file:///Users/matt.mcgrattan/code/timeline/src/js/embed.js) and [timeline.html](file:///Users/matt.mcgrattan/code/timeline/src/timeline.html). |
-| **Widget Architecture** | [jQuery UI 1.10.1](https://github.com/jquery/jquery-ui) | Provides `$.widget()` factory for component creation, subclassing, and event triggering. |
-| **Date Calculations** | [moment.js](https://github.com/timrwood/moment) | High-level date math, duration formatting, and boundary calculations. |
-| **Calendar Math** | [julianDateConverter.js](file:///Users/matt.mcgrattan/code/timeline/src/js/julianDateConverter.js) | Algorithm (Press et al.) converting Julian Day numbers $\leftrightarrow$ Gregorian calendar dates. |
-| **Touch / Scroll Canvas** | [iScroll v4](file:///Users/matt.mcgrattan/code/timeline/src/js/libs/iscroll.js) | Accelerated horizontal kinetic touch and drag scrolling in `#scroll`. |
-| **Cross-Domain Iframe** | [easyXDM 2.4.17](file:///Users/matt.mcgrattan/code/timeline/src/js/libs/easyXDM.min.js) | PostMessage and Flash/SWF fallback for secure iframe $\leftrightarrow$ parent communication. |
-| **Deep Link State** | [jQuery Address 1.5](file:///Users/matt.mcgrattan/code/timeline/src/js/libs/jquery.address-1.5.min.js) | Manages URL hash deep linking and browser history navigation. |
-| **Polyfills** | [json2.js](file:///Users/matt.mcgrattan/code/timeline/src/js/libs/json2.min.js) | Legacy JSON serializer polyfill for old browser environments. |
+| **UI Runtime** | `react` / `react-dom` (`^18.3.1`) | Declarative component rendering, state hooks, and DOM lifecycle. |
+| **Language** | `typescript` (`^5.4.5`) | Strict static typing across data schemas, Julian Day math, and engine state. |
+| **Build & Bundler** | `vite` (`^5.3.1`) + `@vitejs/plugin-react` | Serves local dev on port `8003`, builds static GitHub Pages output to `docs/`, and builds ESM/UMD library bundles to `dist/`. |
+| **Calendar Math** | [`src/utils/julianDateConverter.ts`](file:///Users/matt.mcgrattan/code/timeline/src/utils/julianDateConverter.ts) | Pure TypeScript port of Press et al. Julian Day $\leftrightarrow$ Gregorian calendar conversion, Year 0 rejection, and Oct 1582 Gregorian transition handling. |
+| **Date Arithmetic** | `date-fns` (`^3.6.0`) | Lightweight date boundary calculation (`addYears`, `differenceInDays`). |
+| **Scroll Normalization** | `normalize-wheel-es` (`^1.2.0`) | Normalizes `WheelEvent` (`DOM_DELTA_PIXEL`, `DOM_DELTA_LINE`, `DOM_DELTA_PAGE`) across Chrome, Safari, Firefox, trackpads, and physical scroll wheels. |
+| **Styling & Fonts** | [`WellcomeTimeline.module.css`](file:///Users/matt.mcgrattan/code/timeline/src/components/WellcomeTimeline.module.css) | Scoped CSS Modules with bundled `Cormorant Garamond Variable` and `Work Sans Variable` `.woff2` fonts and `--color-monet-*` custom properties. |
+| **Unit Testing** | `vitest` (`^1.6.0`) + `jsdom` | Unit and integration test runner verifying calendar edge cases, BOM parsing, chronological sorting, collision rules, and auto-zoom. |
 
 ---
 
 ## 3. Directory Layout & File Organization
 
-```
+```text
 timeline/
-├── README.md                      # Original project overview and build notes
-├── MIT-LICENSE.txt                # Open source license
-├── build.ps1                      # Windows PowerShell build script (Closure Compiler)
-├── timeline.sublime-project       # Sublime Text project configuration
-├── build/                         # Compiled and minified production bundles
-│   ├── embed.min.js               # Embed bootstrap script (host page entry point)
-│   ├── wellcomeTimeline.js        # Concatenated unminified application bundle
-│   └── wellcomeTimeline.min.js    # Minified application bundle
-└── src/                           # Source application directory
-    ├── AGENTS.md                  # This document
-    ├── index.html                 # Local development testing harness for embed.js
-    ├── timeline.html              # Core iframe runtime application host
-    ├── sample_data.js             # Sample timeline dataset (Genetics, 124 events)
-    ├── sample_data_2.js           # Extended dataset with rich links (141 events, UTF-8 BOM)
-    ├── css/
-    │   ├── styles.css             # Main UI theme, layouts, sprites, and animations
-    │   └── ie.css                 # Internet Explorer 8 and below styling overrides
-    ├── img/                       # UI sprites, arrows, backgrounds, and loading assets
-    └── js/
-        ├── config.js              # Localization strings and runtime settings
-        ├── utils.js               # Helper math, DOM, string, and query string functions
-        ├── julianDateConverter.js # Julian Day arithmetic
-        ├── jquery.plugins.js      # jQuery plugins (repeatButton, idleTimer, ellipsis, etc.)
-        ├── baseProvider.js        # Abstract data provider base class
-        ├── wellcomeTimelineProvider.js # Concrete Julian Day provider for Wellcome data
-        ├── baseTimeline.js        # Base widget: events, socket, resize, state management
-        ├── timeline.js            # Main timeline widget coordinator and subview linker
-        ├── shell.js               # Layout shell container: manages DOM panels and dialogs
-        ├── headerPanelView.js     # Top title bar and Zoom In / Zoom Out controls
-        ├── mainPanelView.js       # Core timeline engine: ticks, event layout, zoom, scrolling
-        ├── footerPanelView.js     # Bottom bar: Fullscreen toggle and Embed dialog trigger
-        ├── baseDialogueView.js    # Base overlay modal dialog widget
-        ├── detailsView.js         # Event inspection modal dialog with Previous/Next slides
-        ├── embedView.js           # Embed code generator modal dialog
-        ├── genericDialogueView.js # Generic alert/confirmation dialog widget
-        ├── embed.js               # Standalone host-page embedder script (creates iframe)
-        └── libs/                  # Third-party vendor dependencies
-            ├── easyXDM.min.js
-            ├── easyxdm.swf
-            ├── iscroll.js
-            ├── iscroll.min.js
-            ├── jquery.address-1.5.min.js
-            ├── json2.min.js
-            └── moment.min.js
+├── index.html                                  # Vite app entry HTML
+├── package.json                                # Scripts and dependencies
+├── tsconfig.json                               # TypeScript compiler configuration (strict mode)
+├── vite.config.ts                              # Dual-mode Vite config (docs/ static site + dist/ library)
+├── .eslintrc.cjs                               # ESLint configuration
+├── .prettierrc                                 # Prettier formatting rules
+├── .github/
+│   └── workflows/
+│       └── deploy-pages.yml                    # GitHub Actions workflow for GitHub Pages deployment
+├── public/                                     # Static assets copied verbatim to docs/ on build
+│   ├── fonts/                                  # Local Cormorant Garamond & Work Sans variable .woff2 files
+│   ├── monet_letters.json                      # 397-event Monet Letters dataset with IIIF thumbnails
+│   ├── sample_data_2.js                        # 141-event History of Genetics dataset (UTF-8 BOM)
+│   └── sample_data.js                          # 124-event History of Genetics dataset
+├── src/
+│   ├── AGENTS.md                               # This developer and agent architecture guide
+│   ├── main.tsx                                # Standalone app entry point (loads monet_letters.json by default)
+│   ├── lib.ts                                  # Library entry point (exports components, engine, and DOM mounter)
+│   ├── monet_letters.json                      # Bundled default dataset (Claude Monet Correspondence)
+│   ├── sample_data_2.js                        # Legacy dataset with UTF-8 BOM (used by unit tests & ?dataUri=)
+│   ├── sample_data.js                          # Legacy genetics dataset
+│   ├── assets/
+│   │   └── fonts/                              # Variable .woff2 fonts resolved relatively by Vite CSS bundler
+│   ├── types/
+│   │   └── timeline.ts                         # TypeScript interfaces for JSON schemas, computed events, and options
+│   ├── utils/
+│   │   ├── julianDateConverter.ts              # Press et al. Julian Day math, UTF-8 BOM JSON parser, helpers
+│   │   └── __tests__/
+│   │       └── julianDateConverter.test.ts     # 12 Vitest unit tests covering math, sorting, and engine logic
+│   ├── engine/
+│   │   └── timelineEngine.ts                   # Pure layout engine: ticks, 2-pass collision, spillover, auto-zoom
+│   └── components/
+│       ├── WellcomeTimeline.tsx                # Main interactive timeline React component
+│       └── WellcomeTimeline.module.css         # Scoped Monet's Letters theme, 3-level stack, ruler, and modals
+├── docs/                                       # Built static site for GitHub Pages (generated by npm run build)
+├── dist/                                       # Built ESM & UMD library bundles (generated by npm run build:lib)
+└── legacy/                                     # Archived original ES5 / jQuery / iScroll / easyXDM codebase
 ```
 
 ---
 
-## 4. Architectural Patterns & Data Flow
+## 4. Architecture & Data Flow
 
-### 4.1. The Host Embedding Pipeline
+### 4.1. Component & Engine Data Flow
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor User as User Browser
-    participant Host as Host Web Page
-    participant Embed as embed.js
-    participant Iframe as timeline.html (Iframe)
-    participant WT as wellcome.wellcomeTimeline
-
-    User->>Host: Loads page with <div class="timeline" data-uri="...">
-    Host->>Embed: Loads embed.min.js
-    Embed->>Embed: Detects script origin (domain/protocol/port)
-    Embed->>Iframe: Creates easyXDM.Socket iframe pointing to /timeline.html
-    Iframe->>WT: Initializes $('#timeline').wellcomeTimeline({...})
-    WT->>WT: Loads configUri (js/config.js) & dataUri (JSON)
-    WT->>WT: Instantiates WellcomeTimelineProvider
-    WT->>WT: Invokes $('#timeline').timeline({...})
-    WT->>Iframe: Builds Shell, Panels, Dialogues, and iScroll Canvas
+flowchart TD
+    A["Input Data (prop `data` or fetched `dataUri`)"] --> B["parseTimelineJson() (strips UTF-8 BOM)"]
+    B --> C["buildTimelineModel() (src/engine/timelineEngine.ts)"]
+    C --> D["Chronological Sort + Jan 1 Boundary Snap + Present Day Synthesis"]
+    D --> E["Tick Generation (centuryTicks, decadeTicks, yearTicks)"]
+    E --> F["Reactive Viewport State (zoomLevel, scrollX, currentIndex, viewportWidth)"]
+    F --> G["computeEventLayoutAndVisibility() (2-Pass Priority Collision & Spillover)"]
+    F --> H["selectActiveTicks() (Centuries -> Decades -> Years)"]
+    G --> I["WellcomeTimeline Render (3-Level Card Stack + Stems + Details Modal)"]
+    H --> J["WellcomeTimeline Render (Ruler Bar + .tickEvent Availability Squares)"]
 ```
 
-1. **Host Element**: The host page contains `<div class="timeline" data-uri="..." data-eventid="..."></div>` and includes [embed.min.js](file:///Users/matt.mcgrattan/code/timeline/src/js/embed.js).
-2. **Dynamic Script Discovery**: [embed.js](file:///Users/matt.mcgrattan/code/timeline/src/js/embed.js) inspects `<script>` tags to identify its own absolute hosting URL, deriving protocol, hostname, and port.
-3. **Iframe Injection**: Creates an `easyXDM.Socket` containing an iframe pointing to `timeline.html` with query parameters:
-   - `isHomeDomain`: Boolean indicating if host domain matches timeline domain.
-   - `isOnlyInstance`: Boolean indicating if single timeline on the page.
-   - `dataUri`: Target timeline JSON data source.
-   - `eventId`: Optional initial event ID to display.
-   - `embedScriptUri`: Full URI to `embed.min.js`.
-   - `url`: Parent document URL.
+### 4.2. Standalone App vs. Host Page Embedding
 
-### 4.2. Widget Hierarchy and Component Structure
+1. **Standalone App ([`src/main.tsx`](file:///Users/matt.mcgrattan/code/timeline/src/main.tsx)):**
+   - Parses [`src/monet_letters.json`](file:///Users/matt.mcgrattan/code/timeline/src/monet_letters.json) at startup for instant zero-latency rendering.
+   - Checks `window.location.search` for `?dataUri=<path>`: if provided (e.g., `?dataUri=sample_data_2.js`), fetches and parses that dataset instead.
+2. **React Component Import ([`src/lib.ts`](file:///Users/matt.mcgrattan/code/timeline/src/lib.ts)):**
+   ```tsx
+   import { WellcomeTimeline } from 'wellcome-timeline';
+   import 'wellcome-timeline/dist/style.css';
 
-The application adopts the **jQuery UI Widget Factory** pattern (`$.widget(name, [basePrototype], prototype)`):
-
-```mermaid
-classDiagram
-    class BaseProvider {
-        +options
-        +load()
-    }
-    class WellcomeTimelineProvider {
-        +getDate(julianDay)
-        +getTimelineStartDate()
-        +getTimelineEndDate()
-        +setEventStartDate(evnt)
-        +setEventEndDate(evnt)
-    }
-    BaseProvider <|-- WellcomeTimelineProvider
-
-    class BaseTimeline {
-        +currentIndex
-        +isFullScreen
-        +socket
-        +changeIndex(index)
-        +viewEvent(eventId)
-        +setAddress()
-        +updateAddress()
-        +bind(eventName, handler)
-        +_trigger(eventName, eventObject)
-    }
-    class Timeline {
-        +shell
-        +headerPanelView
-        +mainPanelView
-        +footerPanelView
-        +detailsView
-        +embedView
-        +genericDialogueView
-    }
-    BaseTimeline <|-- Timeline
-
-    class BaseDialogueView {
-        +isActive
-        +allowClose
-        +open()
-        +close()
-        +enableClose()
-        +disableClose()
-    }
-    class DetailsView {
-        +events
-        +_prepEvent(direction, evnt)
-        +_scroll(direction, pos)
-    }
-    class EmbedView {
-        +embedScriptTemplate
-        +_getCustomSize()
-    }
-    class GenericDialogueView
-    BaseDialogueView <|-- DetailsView
-    BaseDialogueView <|-- EmbedView
-    BaseDialogueView <|-- GenericDialogueView
-```
-
-- **Global Registry Reference**: During initialization of [`timeline_baseTimeline`](file:///Users/matt.mcgrattan/code/timeline/src/js/baseTimeline.js#L14), the widget sets `$.wellcome.timeline = self;`. All views and helper functions access timeline state via `$.wellcome.timeline`.
+   <WellcomeTimeline dataUri="monet_letters.json" eventId={43515} />
+   ```
+3. **Drop-In Host HTML Snippet ([`mountAllWellcomeTimelines`](file:///Users/matt.mcgrattan/code/timeline/src/lib.ts#L50-L76)):**
+   When loaded via a `<script>` tag (`wellcome-timeline.umd.cjs`), the library automatically scans the DOM for `.timeline` elements and mounts a React root inside each:
+   ```html
+   <div class="timeline" data-uri="monet_letters.json" data-eventid="43515" style="width:100%; height:700px;"></div>
+   <link rel="stylesheet" href="./style.css" />
+   <script src="./wellcome-timeline.umd.cjs"></script>
+   ```
 
 ---
 
-## 5. Event Bus & Inter-Component Communication
+## 5. Core Mathematical & Layout Engine (`src/engine/timelineEngine.ts`)
 
-The system communicates internally via custom jQuery events triggered on `self.element` (the root container).
+[`src/engine/timelineEngine.ts`](file:///Users/matt.mcgrattan/code/timeline/src/engine/timelineEngine.ts) is a pure, side-effect-free TypeScript module that computes all timeline geometry, tick bands, collision states, and zoom coordinates.
 
-### 5.1. Internal Application Events
+### 5.1. Calendar Boundary Alignment (`makeBoundaryDate` & `buildTimelineModel`)
+- Computes initial date bounds from `data.EarliestJulianDay` and `data.LastJulianDay` using [`julianDayToDate`](file:///Users/matt.mcgrattan/code/timeline/src/utils/julianDateConverter.ts#L162-L176).
+- Snaps `startDate` to **January 1** (`monthIndex = 0, day = 1`, fixing the legacy `new Date(year, 1, 1)` February 1 offset bug) and sets `endDate` to the exact exclusive upper bound (`addYears(..., 1 | 10 | 100)`):
+  - Span `< 10` years: snaps to January 1 of `startYear` through `endYear + 1`.
+  - Span `10–99` years: snaps to decade boundaries (e.g., `1860-01-01` to `1900-01-01`).
+  - Span `>= 100` years: snaps to century boundaries (e.g., `1800-01-01` to `2100-01-01`).
+- Normalizes every event's horizontal coordinate to `position` $\in [0, 1]$ via `differenceInDays(evStart, startDate) / days`.
 
-| Constant Name | Event String | Fired By | Purpose / Handlers |
-| :--- | :--- | :--- | :--- |
-| `RESIZE` | `"onResize"` | Window resize / Shell | Triggers re-computation of widths, layouts, and dialog centering. |
-| `TOGGLE_FULLSCREEN` | `"onToggleFullScreen"` | Footer panel / Socket | Toggles full-viewport fixed position mode via easyXDM socket to parent frame. |
-| `ZOOM_IN` / `ZOOM_OUT` | `"onZoomIn"` / `"onZoomOut"` | Header panel | Initiates step zoom in or out on main panel canvas. |
-| `START_ZOOM` / `FINISH_ZOOM` | `"onStartZoom"` / `"onFinishZoom"` | Main panel | Disables zoom/prev/next buttons during animation, refreshes state upon completion. |
-| `START_SCROLL` / `FINISH_SCROLL` | `"onStartScroll"` / `"onFinishScroll"` | Main panel / Details | Synchronizes horizontal slide transitions between detail cards. |
-| `SCROLL_STEP` | `"onScrollStep"` | Main panel | Transmits kinetic scroll step `{ direction, pos }` to synchronize detail slides. |
-| `START_NAVIGATING` / `FINISH_NAVIGATING` | `"onStartNavigating"` / `"onFinishNavigating"` | Main panel | Locks button interactions while auto-navigating/scrolling to a target event. |
-| `START_INDEX_CHANGE` | `"onStartIndexChange"` | `changeIndex()` | Notifies panels that an event has been selected; updates URL hash. |
-| `FINISH_INDEX_CHANGE` | `"onFinishIndexChange"` | Main panel | Signals that event selection navigation animation has settled. |
-| `SHOW_EVENT_DETAILS_DIALOGUE` | `"onShowEventDetailsDialogue"` | `changeIndex()` | Opens the event details overlay modal for the selected event. |
-| `HIDE_EVENT_DETAILS_DIALOGUE` | `"onHideEventDetailsDialogue"` | Details view close | Deselects event and closes details overlay modal. |
-| `SHOW_EMBED_DIALOGUE` / `HIDE_EMBED_DIALOGUE` | `"onShowEmbedDialogue"` / `...` | Footer panel / Embed view | Shows or hides the iframe embed code generation dialog and background overlay mask. |
-| `CLOSE_ACTIVE_DIALOGUE` | `"onCloseActiveDialogue"` | Shell overlay mask / ESC | Closes whatever dialog is currently open. |
-| `ESCAPE` / `RETURN` | `"onEscape"` / `"onReturn"` | Document keyup | Triggers modal dismissal or keyboard selection. |
-| `REFRESHED` | `"onRefreshed"` | Main panel | Indicates ticks, event visibility, and stacks have completed rendering. |
+### 5.2. Chronological Event Sorting & Present Day Synthesis
+- Source JSON files (such as `sample_data_2.js`) occasionally list events out of chronological order. [`buildTimelineModel`](file:///Users/matt.mcgrattan/code/timeline/src/engine/timelineEngine.ts#L132-L144) sorts all input events by:
+  1. `JulianDayStart` ascending
+  2. `Priority` ascending (lower number = higher importance)
+  3. Original array index ascending
+- If `endDate.getFullYear() >= nowDate.getFullYear()`, synthesizes a `"Present Day"` marker event (`isPresent: true, Priority: 1`) at the end of the array.
+- Assigns each event an initial primary `stackLevel = index % 3` (`0`, `1`, or `2`).
 
-### 5.2. Parent-Iframe Socket Events (`easyXDM`)
+### 5.3. Dynamic Resolution Tick Bands (`selectActiveTicks` & `getMaxWidth`)
+- Pre-computes three tick arrays in [`buildTimelineModel`](file:///Users/matt.mcgrattan/code/timeline/src/engine/timelineEngine.ts#L204-L237): `centuryTicks`, `decadeTicks`, and `yearTicks`, associating each tick with the non-present events falling within its year range.
+- [`selectActiveTicks(model, availableWidth, options)`](file:///Users/matt.mcgrattan/code/timeline/src/engine/timelineEngine.ts#L317-L332) selects the active ruler band based on pixel density:
+  1. **`centuries`:** When `model.centuries > 0` and `availableWidth / model.centuries <= 500px` (`maxCenturyIntervalWidth`).
+  2. **`decades`:** When `model.decades > 0` and `availableWidth / model.decades <= 2000px` (`maxDecadeIntervalWidth`).
+  3. **`years`:** Whenever decade width exceeds `2000px` (so each individual year tick is `> 200px` wide), regardless of whether the timeline spans `< 100` or `>= 100` years.
+- [`getMaxWidth(model, options)`](file:///Users/matt.mcgrattan/code/timeline/src/engine/timelineEngine.ts#L265-L273) returns `Math.max(maxDecadeIntervalWidth * decades, maxYearIntervalWidth * years)` (`500px * years`), ensuring multi-century timelines can always zoom in to year-level resolution.
 
-The `easyXDM.Socket` connects [timeline.html](file:///Users/matt.mcgrattan/code/timeline/src/timeline.html) to [embed.js](file:///Users/matt.mcgrattan/code/timeline/src/js/embed.js) in the parent page:
+### 5.4. Two-Pass Priority Collision Engine & Spillover (`computeEventLayoutAndVisibility`)
+To prevent cards (`207px` wide with thumbnail, `137px` `.min` without thumbnail, plus a `10px` minimum horizontal margin) from overlapping on the 3-level vertical stack (`top = 0px, 101px, 202px`):
 
-- **`onToggleFullScreen`**: Toggles `position: fixed; z-index: 9999; width: 100%; height: 100%` on host page iframe element, disabling parent page scrolling.
-- **`onRedirect`**: Instructs host window to navigate to a target URL (`window.location.replace`).
-- **`onRefresh`**: Instructs host page to reload (`window.location.reload`).
-- **`onTrackEvent` / `onTrackVariable`**: Sends Google Analytics event data (`trackEvent`, `trackVariable`) up to parent window if present.
+1. **Candidate Priority Ordering (Eliminating "Zombie Suppression"):**
+   - The legacy left-to-right sweep had a flaw where a medium-priority event `A` could suppress an earlier lower-priority event `B`, and then `A` itself would be suppressed by a later high-priority event `C`—leaving an unnecessary blank gap where `B` could have fit.
+   - [`computeEventLayoutAndVisibility`](file:///Users/matt.mcgrattan/code/timeline/src/engine/timelineEngine.ts#L345-L413) sorts candidates by `(forcedVisibleIndex first, Priority ascending, index ascending)` before placement. Higher-priority events claim their horizontal intervals `[leftPos, leftPos + width + 10]` first, so defeated lower-priority events never suppress neighbors.
+2. **Pass 1 — Primary Stack Placement:**
+   - Each candidate attempts to fit on its primary round-robin `stackLevel` (`index % 3`), preserving the visual 3-tier staircase rhythm when space permits.
+3. **Pass 2 — Dense-Cluster Spillover:**
+   - Any candidate that collided on its primary row checks the remaining rows `(stackLevel + 1) % 3` and `(stackLevel + 2) % 3`. If another row has an unobstructed `[leftPos, leftPos + width + 10]` window, the event spills over into that row (`stackLevel`, `top`, and stem `lineHeight` are updated dynamically).
+4. **Max-Zoom Collision Safety & Forced Selection Visibility:**
+   - Unlike the legacy engine (which bypassed collision detection at max zoom and caused same-year cards to pile unreadably on top of one another), collision detection remains active at **all** zoom levels.
+   - Passing `forcedVisibleIndex` (`currentIndex` in [`WellcomeTimeline.tsx`](file:///Users/matt.mcgrattan/code/timeline/src/components/WellcomeTimeline.tsx#L130-L139)) guarantees that the user's actively selected or deep-linked event is placed first and is always visible on the canvas.
 
----
-
-## 6. Core Algorithms in `mainPanelView.js`
-
-[mainPanelView.js](file:///Users/matt.mcgrattan/code/timeline/src/js/mainPanelView.js) is the engine of the timeline. Agents working on zoom, event layout, or rendering must understand these algorithms:
-
-### 6.1. Dynamic Resolution Bands & Ticks
-1. Calculates chronological span between `startDate` and `endDate`.
-2. Evaluates total spans:
-   - Days: `endDate.diff(startDate, 'days')`
-   - Years: `endDate.diff(startDate, 'years')`
-   - Decades: Calculated via `_getDecade()`
-   - Centuries: Calculated via `_getCentury()`
-3. Creates tick arrays for **Years**, **Decades**, and **Centuries**.
-4. During render (`_drawTicks`):
-   - At lower zoom levels (content width small), century ticks or decade ticks are displayed.
-   - At higher zoom levels, individual year ticks are displayed.
-   - Tick elements contain dates and small dot indicators (`.tickEvent`) showing where events exist along the timeline ruler.
-
-### 6.2. Event Stacking & Collision Detection
-To prevent event cards from overlapping:
-- **`eventStackSize`**: Set to `3` in [wellcomeTimelineProvider.js](file:///Users/matt.mcgrattan/code/timeline/src/js/wellcomeTimelineProvider.js).
-- Events are distributed round-robin across `3` vertical stack levels (0, 1, 2).
-- When drawing events (`_updateVisibleEvents` and `_updateStackLevelVisibleEvents`):
-  - In each stack level, event horizontal positions are calculated.
-  - If two adjacent events on the same stack level would overlap (distance between positions $<$ card width), only higher-priority / earlier events remain visible (`evnt.isVisible = true`), while the colliding event is hidden (`evnt.isVisible = false`).
-  - As user zooms in, pixel distance between normalized date coordinates increases, collision disappears, and hidden events dynamically appear.
-
-### 6.3. Zooming Dynamics
-- **Zoom Factor**: Zooming scales `.content` width exponentially (`zoomFactor = 3`).
-- **Smooth Animation**: Uses jQuery `.animate()` with `easeInOutCubic` easing to expand `#scroll .content` width. During the animation step callback:
-  - If an event is selected, it maintains centering on that event's target scroll position.
-  - If no event is selected, it preserves the relative normalized scroll percentage.
-  - Re-invokes `_redraw(true, true)` on each step to update positions smoothly.
-- **`_zoomUntilVisible(evnt)`**: If a user deep-links to or selects an event that is currently clipped/hidden due to low zoom density, this recursive function automatically steps through zoom-ins until `evnt.isVisible` is satisfied, then scrolls into view.
+### 5.5. Exponential Zooming & Recursive `_zoomUntilVisible` (`computeZoomUntilVisible`)
+- Content width scales exponentially by powers of `zoomFactor = 3`:
+  $$\text{contentWidth} = \text{baseWidth} \times 3^{\text{zoomLevel}}$$
+- When a user clicks a greyed-out `.tickEvent` square, clicks `Previous`/`Next`, or loads a URL hash `#<EventId>`, [`computeZoomUntilVisible`](file:///Users/matt.mcgrattan/code/timeline/src/engine/timelineEngine.ts#L428-L473) increments `zoomLevel` until the target event is naturally visible without collision (or until `canZoom(1, ...)` reaches `maxWidth`, at which point `forcedVisibleIndex` guarantees visibility) and computes the centered horizontal offset via [`getEventScrollPosition`](file:///Users/matt.mcgrattan/code/timeline/src/engine/timelineEngine.ts#L419-L426).
 
 ---
 
-## 7. Data Contracts & JSON Schema
+## 6. Scrolling, Gestures & Visual Theme (`src/components/WellcomeTimeline.tsx`)
 
-Timeline data is loaded asynchronously from a JSON endpoint specified in the `data-uri` attribute.
+### 6.1. Wheel Normalization & Immediate vs. Animated Transitions
+- **Wheel & Trackpad Input ([`onWheel`](file:///Users/matt.mcgrattan/code/timeline/src/components/WellcomeTimeline.tsx#L387-L413)):**
+  - Uses `normalizeWheel(e.nativeEvent)` from `normalize-wheel-es` to convert browser-specific wheel deltas (`pixelX`, `pixelY`) into uniform pixel offsets.
+  - Detects when the pointer is over a scrollable `.tickEvents` container in a dense tick (`scrollHeight > clientHeight`) and allows native vertical scrolling inside that tick grid when `|deltaY| > |deltaX|`.
+- **Pointer Drag & Kinetic Inertia ([`onPointerDown`](file:///Users/matt.mcgrattan/code/timeline/src/components/WellcomeTimeline.tsx#L329-L385)):**
+  - Tracks pointer velocity during drag and launches a `requestAnimationFrame` decay loop (`v *= 0.92`) on `pointerup`.
+- **Transition Gating ([`triggerSmoothTransition`](file:///Users/matt.mcgrattan/code/timeline/src/components/WellcomeTimeline.tsx#L128-L137)):**
+  - `.scrollContent` defines a `0.45s cubic-bezier(0.65, 0, 0.35, 1)` transition on `width` and `transform`.
+  - That CSS transition is active **only** when `isAnimating` is `true` (for 460ms after a programmatic Zoom In/Out or event selection jump). During wheel scrolling, pointer dragging, and kinetic coasting, `.scrollContentImmediate` (`transition: none !important`) is applied so `translate3d` updates at native 60–120fps without fighting the bezier curve.
 
-### 7.1. Root Timeline Object Schema
-
-```json
-{
-  "Title": "The history of genetics: from Darwin to present day",
-  "FeatureImagePath": "http://wellcomelibrary.org/.../images/27491",
-  "Body": "<p>Introductory HTML description displayed at index -1...</p>",
-  "InitialCaption": "In 1859 the story of genetics began...",
-  "IsOpenEnded": false,
-  "EarliestJulianDay": 2400046,
-  "StartDateDisplay": "1859",
-  "LastJulianDay": 2456434,
-  "EndDateDisplay": "Present Day",
-  "BackgroundEvents": [ ... ],
-  "Events": [ ... ]
-}
-```
-
-### 7.2. Event Object Schema
-
-```json
-{
-  "EventId": 6389,
-  "Title": "Charles Darwin publishes 'On the Origin of Species'",
-  "Body": "<p>Evolution had been a topic of vigorous debate...</p>",
-  "Priority": 1,
-  "Year": "1859",
-  "StartDisplayYear": "1859",
-  "StartDisplay": "1859",
-  "EndDisplayYear": null,
-  "EndDisplay": null,
-  "JulianDayStart": 2400046,
-  "JulianDayEnd": -9223372036854775808,
-  "ThumbnailPath": "http://wellcomelibrary.org/.../1859-Darwin-100.jpg",
-  "FeatureImagePath": "http://wellcomelibrary.org/.../1859-Darwin-250",
-  "PromoImagePath": "http://wellcomelibrary.org/.../1859-Darwin-250",
-  "LinkText": "Read 'On the Origin of Species'",
-  "LinkTarget": "http://wellcomelibrary.org/player/b1802922x#0/5/...",
-  "ImageCredit": "Test image credit (c) Wellcome Library",
-  "UsedBy": [ "/21461/fomg/fomg-timeline/" ]
-}
-```
-
-#### Important Data Schema Notes
-1. **End Date Sentinel Value**: If an event has no end date (a point-in-time event), `JulianDayEnd` is set to `-9223372036854775808` (the minimum 64-bit integer value). [`WellcomeTimelineProvider.setEventEndDate`](file:///Users/matt.mcgrattan/code/timeline/src/js/wellcomeTimelineProvider.js#L55-L61) tests `if (evnt.JulianDayEnd < 0)` to default `endDate = startDate`.
-2. **Present Day Extension**: If the timeline end date extends to or past the current year, `mainPanelView.js` synthesizes a special "Present Day" event at index `Events.length`.
-3. **Introductory Event (Index -1)**: When viewing event index `-1`, the [detailsView.js](file:///Users/matt.mcgrattan/code/timeline/src/js/detailsView.js) displays the root dataset's `Title`, `FeatureImagePath`, and `Body`.
-4. **UTF-8 BOM Warning**: Certain datasets (such as `sample_data_2.js`) originate from Windows systems and contain a UTF-8 Byte Order Mark (`\ufeff`). When reading, generating, or processing data files, tools must tolerate or strip the UTF-8 BOM.
+### 6.2. Monet's Letters Theme Tokens ([`WellcomeTimeline.module.css`](file:///Users/matt.mcgrattan/code/timeline/src/components/WellcomeTimeline.module.css))
+- **Fonts:**
+  - `--font-serif`: `'Cormorant Garamond Variable', 'Cormorant Garamond', ui-serif, Georgia, serif`
+  - `--font-sans`: `'Work Sans Variable', 'Work Sans', ui-sans-serif, system-ui, sans-serif`
+- **Color Palette:**
+  - `--color-monet-page`: `#fefbf4` (warm ivory paper background)
+  - `--color-monet-section`: `#f6f3ec` (soft cream header, footer, and canvas wash)
+  - `--color-monet-panel`: `#ebe4db` (stone thumbnail frames and zoom pill buttons)
+  - `--color-monet-card`: `#ffffff` (event cards and details modal surface)
+  - `--color-monet-border`: `#d8cfc3` (card borders and hidden `.tickEvent` squares)
+  - `--color-monet-link`: `#19599a` (Monet royal blue headings, card left accent, and tick year labels)
+  - `--color-monet-deep-blue`: `#124574` (selected/highlighted event cards, available `.tickEvent` squares, and `Prev`/`Next`/`Close` buttons)
+  - `--color-monet-soft-blue`: `#83a3c4` (vertical event stem lines)
+  - `--color-monet-text`: `#1c1c1e` (primary charcoal ink)
+  - `--color-monet-text-secondary`: `#606060` (secondary labels)
 
 ---
 
-## 8. Build Process, Compilation & Scripts
+## 7. Data Contracts & Datasets
 
-### 8.1. Production Bundle Build
+### 7.1. Included Datasets
+- [`src/monet_letters.json`](file:///Users/matt.mcgrattan/code/timeline/src/monet_letters.json) & [`public/monet_letters.json`](file:///Users/matt.mcgrattan/code/timeline/public/monet_letters.json): **Default dataset.** 397 letters from the Claude Monet Correspondence collection (`1864–1926`), populated with square IIIF thumbnails (`.../full/!100,100/0/default.jpg`) and feature images (`.../full/!250,250/0/default.jpg`) from the DLCS Presentation API (`https://presentation-api.dlc.services/38/monet-letters/howard-letter-collection`).
+- [`src/sample_data_2.js`](file:///Users/matt.mcgrattan/code/timeline/src/sample_data_2.js) & [`public/sample_data_2.js`](file:///Users/matt.mcgrattan/code/timeline/public/sample_data_2.js): 141-event Wellcome Library *History of Genetics* dataset (`1859–2012`), prefixed with a UTF-8 BOM (`\uFEFF`). Accessible at `?dataUri=sample_data_2.js`.
+- [`src/sample_data.js`](file:///Users/matt.mcgrattan/code/timeline/src/sample_data.js) & [`public/sample_data.js`](file:///Users/matt.mcgrattan/code/timeline/public/sample_data.js): 124-event *History of Genetics* dataset. Accessible at `?dataUri=sample_data.js`.
 
-The production build combines and minifies JavaScript files using Google Closure Compiler.
-
-- **PowerShell Script**: [build.ps1](file:///Users/matt.mcgrattan/code/timeline/build.ps1) (in repository root).
-- **Outputs**:
-  - `build/embed.min.js`: Minified version of [src/js/embed.js](file:///Users/matt.mcgrattan/code/timeline/src/js/embed.js).
-  - `build/wellcomeTimeline.js`: Concatenated unminified bundle of the timeline scripts.
-  - `build/wellcomeTimeline.min.js`: Minified bundle of the timeline scripts.
-
-### 8.2. Script Concatenation Order (Strict Dependency Sequence)
-
-When bundling or loading unminified scripts in [timeline.html](file:///Users/matt.mcgrattan/code/timeline/src/timeline.html), the following sequence **must be preserved**:
-
-1. `js/julianDateConverter.js`
-2. `js/jquery.plugins.js`
-3. `js/utils.js`
-4. `js/baseProvider.js`
-5. `js/wellcomeTimelineProvider.js` *(extends `BaseProvider`)*
-6. `js/baseTimeline.js`
-7. `js/wellcomeTimeline.js` *(entry widget: loads config & data)*
-8. `js/timeline.js` *(extends `timeline_baseTimeline`)*
-9. `js/shell.js`
-10. `js/headerPanelView.js`
-11. `js/mainPanelView.js`
-12. `js/footerPanelView.js`
-13. `js/baseDialogueView.js`
-14. `js/genericDialogueView.js` *(extends `baseDialogueView`)*
-15. `js/embedView.js` *(extends `baseDialogueView`)*
-16. `js/detailsView.js` *(extends `baseDialogueView`)*
+### 7.2. Important Schema Invariants ([`src/types/timeline.ts`](file:///Users/matt.mcgrattan/code/timeline/src/types/timeline.ts))
+1. **Point-in-Time Sentinel (`JULIAN_DAY_END_SENTINEL = -9223372036854775808`):** Events without an end date use the minimum 64-bit integer (`< 0`) for `JulianDayEnd`. [`getEventDates`](file:///Users/matt.mcgrattan/code/timeline/src/utils/julianDateConverter.ts#L181-L194) checks `JulianDayEnd == null || JulianDayEnd < 0` and sets `endDate = startDate`.
+2. **UTF-8 BOM Handling:** [`parseTimelineJson`](file:///Users/matt.mcgrattan/code/timeline/src/utils/julianDateConverter.ts#L209-L212) strips leading `\uFEFF` characters before `JSON.parse`.
+3. **Introductory View (`currentIndex === -1`):** Displays the root dataset's `Title`, `FeatureImagePath`, and `Body` in the details overlay modal.
 
 ---
 
-## 9. Development Workflow & Local Testing
+## 8. Development, Testing, Build & Deployment Workflows
 
-### 9.1. Running a Local Server (Port 8003)
-
-Because `easyXDM`, iframes, and AJAX (`$.getJSON`) rely on HTTP headers and origin checking, the application **cannot be tested using the `file://` protocol**.
-- [`embed.js`](file:///Users/matt.mcgrattan/code/timeline/src/js/embed.js#L48-L55) derives its `basePath` relative to `scriptUri`, so it works both at the domain root (`/index.html`) and under any subpath (`/src/index.html` or GitHub Pages `/<repo>/src/index.html`).
-- [`src/`](file:///Users/matt.mcgrattan/code/timeline/src) is self-contained: [`timeline.html`](file:///Users/matt.mcgrattan/code/timeline/src/timeline.html) loads the unminified `js/*.js` scripts directly, and `src/build/` also contains a copy of `build/`.
-
-Run a local HTTP server from `/Users/matt.mcgrattan/code/timeline`:
+### 8.1. NPM Scripts ([`package.json`](file:///Users/matt.mcgrattan/code/timeline/package.json))
 
 ```bash
-# Serve src/ directly at http://localhost:8003/index.html
-python3 -m http.server 8003 --directory src
+# Start local Vite dev server at http://localhost:8003/
+npm run dev
 
-# Or serve the repo root at http://localhost:8003/src/index.html
-python3 -m http.server 8003
+# Run ESLint across src/**/*.{ts,tsx}
+npm run lint
+
+# Run Vitest unit & engine test suite (12 tests in julianDateConverter.test.ts)
+npm test
+
+# Build both the GitHub Pages static site (docs/) and ESM/UMD library bundles (dist/)
+npm run build
+
+# Build only the GitHub Pages static site into docs/ (with docs/.nojekyll)
+npm run build:pages
+
+# Build only the ESM/UMD library bundles into dist/
+npm run build:lib
 ```
 
-### 9.2. Accessing the Application & Sample Datasets
+### 8.2. Local Verification URLs (Port 8003)
+- **Monet Letters Timeline (Default):** `http://localhost:8003/`
+- **Monet Letters Deep-Link Auto-Zoom:** `http://localhost:8003/#43515`
+- **History of Genetics Timeline:** `http://localhost:8003/?dataUri=sample_data_2.js`
+- **Genetics Deep-Link Auto-Zoom (Friedrich Miescher, 1871):** `http://localhost:8003/?dataUri=sample_data_2.js#15452`
 
-- **Embed Test Harness (Default: `sample_data_2.js`)**: `http://localhost:8003/index.html`
-- **Deep-Linked Event (Visible at Initial Zoom)**: `http://localhost:8003/index.html#6389` *(1859 — Charles Darwin)*
-- **Deep-Linked Event (Triggers `_zoomUntilVisible` Auto-Zoom)**: `http://localhost:8003/index.html#15452` *(1871 — Friedrich Miescher)*
-- **Switching Sample Datasets**: In [`src/index.html`](file:///Users/matt.mcgrattan/code/timeline/src/index.html#L14), change the `data-uri` attribute on `<div class="timeline" data-uri="sample_data_2.js">` to `"sample_data.js"`. Note that the query string on `<script src="js/embed.js?dataUri='sample_data.js'">` in `index.html` is ignored by [`embed.js`](file:///Users/matt.mcgrattan/code/timeline/src/js/embed.js#L69), which reads `$(element).attr('data-uri')`.
-- **Important (`timeline.html` Cannot Be Opened Standalone)**: Always load via `index.html` (the host page). Opening `timeline.html` directly without a parent `easyXDM` frame throws `Uncaught TypeError: Cannot read properties of undefined (reading 'replace')` in `easyXDM.min.js` because [`baseTimeline.js`](file:///Users/matt.mcgrattan/code/timeline/src/js/baseTimeline.js#L50) initializes `new easyXDM.Socket(...)` expecting `xdm_e`, `xdm_c`, and `xdm_p` query parameters from the parent window.
-
-### 9.3. Switching Between Minified and Unminified Debugging
-
-#### In [src/timeline.html](file:///Users/matt.mcgrattan/code/timeline/src/timeline.html):
-- **To test minified bundle** (default):
-  ```html
-  <script type="text/javascript" src="build/wellcomeTimeline.min.js"></script>
-  ```
-- **To test individual source files directly (No build step or `/build` mapping required)**:
-  Comment out `build/wellcomeTimeline.min.js` and uncomment the 16 individual script tags listed in the block comment inside [src/timeline.html](file:///Users/matt.mcgrattan/code/timeline/src/timeline.html#L32-L48).
-
-#### In [src/index.html](file:///Users/matt.mcgrattan/code/timeline/src/index.html):
-- Switch `<script type="text/javascript" src="js/embed.js"></script>` or `build/embed.min.js`.
+### 8.3. Deploying to GitHub Pages
+The Vite static build outputs to [`docs/`](file:///Users/matt.mcgrattan/code/timeline/docs) with relative asset and font URLs (`base: './'`) so it works both at a root domain and under a repository subpath (`https://<user>.github.io/<repo>/`):
+- **Target GitHub Pages Repository (`/Users/matt.mcgrattan/code/timelinetest`):**
+  - Remote: `git@github.com:mattmcgrattan/timelinetest.git` (`main` branch)
+  - Live URL: `https://mattmcgrattan.github.io/timelinetest/`
+  - To update the live deployment after running `npm run build`:
+    ```bash
+    rm -rf /Users/matt.mcgrattan/code/timelinetest/assets
+    cp -R /Users/matt.mcgrattan/code/timeline/docs/. /Users/matt.mcgrattan/code/timelinetest/
+    git -C /Users/matt.mcgrattan/code/timelinetest add -A
+    git -C /Users/matt.mcgrattan/code/timelinetest commit -m "Update timeline build"
+    git -C /Users/matt.mcgrattan/code/timelinetest push origin main
+    ```
 
 ---
 
-## 10. Agent Guidelines & Code Modification Rules
+## 9. Agent Guidelines & Modification Rules
 
-When making changes to this repository, AI agents must abide by the following technical constraints:
-
-1. **Maintain Prototype & Widget Inheritance Integrity**:
-   - `WellcomeTimelineProvider` inherits from `BaseProvider` via `Child.prototype = new Parent(); Child.prototype.constructor = Child;`. Do not introduce ES6 classes without a transpilation pipeline.
-   - jQuery UI widgets inherit via `$.widget("ns.childWidget", $.ns.parentWidget, { ... })`. Ensure parent methods are called via `$.ns.parentWidget.prototype.methodName.call(self, ...)`.
-2. **Preserve Global Namespace Expectations**:
-   - `$.wellcome.timeline` is expected to be accessible across views.
-   - Do not pollute `window` beyond existing intentional helpers in [utils.js](file:///Users/matt.mcgrattan/code/timeline/src/js/utils.js) (`window.log`).
-3. **Respect iScroll Lifecycle**:
-   - Any dynamic changes to `#scroll` or `.content` element sizes must be followed by `self.scroll.refresh()` to recalculate scroll boundaries and touch listeners.
-4. **Coordinate Transitions via Event Bus**:
-   - Do not trigger direct DOM manipulations between separate panel widgets. Instead, fire the designated event on `self._trigger(...)` or invoke standard methods on `$.wellcome.timeline`.
-5. **Preserve Compatibility with Historic Browsers**:
-   - Do not use modern ES6+ features (`const`, `let`, arrow functions, template literals, `async/await`, `fetch`, Promises) in runtime code unless a build step transpiles them, as the project was authored for standard ECMAScript 5 environments.
-6. **Double-Check Date Edge Cases**:
-   - Julian day math does not recognize Year 0.
-   - Gregorian transition occurred between October 4, 1582 and October 15, 1582. Dates in that range are flagged invalid by [julianDateConverter.js](file:///Users/matt.mcgrattan/code/timeline/src/js/julianDateConverter.js).
-   - Negative Julian day end (`< 0`) must always be treated as a single point-in-time event.
+1. **Preserve Pure Engine Separation:** Keep all mathematical, tick-selection, and collision-detection logic in [`src/engine/timelineEngine.ts`](file:///Users/matt.mcgrattan/code/timeline/src/engine/timelineEngine.ts) and [`src/utils/julianDateConverter.ts`](file:///Users/matt.mcgrattan/code/timeline/src/utils/julianDateConverter.ts) free of DOM or React dependencies so they remain deterministically unit-testable in [`julianDateConverter.test.ts`](file:///Users/matt.mcgrattan/code/timeline/src/utils/__tests__/julianDateConverter.test.ts).
+2. **Maintain Card & Stack Geometry Constants:** If modifying card dimensions in [`WellcomeTimeline.module.css`](file:///Users/matt.mcgrattan/code/timeline/src/components/WellcomeTimeline.module.css) (currently `207px` outer width with thumbnail, `137px` `.min` outer width without thumbnail, `101px` vertical step per stack level, `350px` `.eventsLayer` height), update the corresponding layout constants in [`buildTimelineModel`](file:///Users/matt.mcgrattan/code/timeline/src/engine/timelineEngine.ts#L168-L185) and [`computeEventLayoutAndVisibility`](file:///Users/matt.mcgrattan/code/timeline/src/engine/timelineEngine.ts#L379-L386).
+3. **Keep `transition: none` During Interactive Scrolling:** Never apply the 450ms `cubic-bezier` CSS transition during `onWheel`, `onPointerMove`, or kinetic inertia frames—always gate it via `triggerSmoothTransition()` (`isAnimating`) for programmatic zoom and selection jumps only.
+4. **Use Relative Asset Paths for GitHub Pages Compatibility:** Keep `base: './'` in [`vite.config.ts`](file:///Users/matt.mcgrattan/code/timeline/vite.config.ts#L9) and reference fonts from [`src/assets/fonts/`](file:///Users/matt.mcgrattan/code/timeline/src/assets/fonts) using relative `../assets/fonts/...` paths in [`WellcomeTimeline.module.css`](file:///Users/matt.mcgrattan/code/timeline/src/components/WellcomeTimeline.module.css#L1-L97).
